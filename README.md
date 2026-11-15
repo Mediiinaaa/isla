@@ -31,6 +31,8 @@ Según lo que actives, Isla te pedirá:
 - **Automatización**: para controlar Spotify y Música
 - **Calendarios**: para mostrar tus eventos (no salen de tu Mac)
 
+<sub>Parte de este proyecto se ha hecho con ayuda de Claude (Anthropic).</sub>
+
 ## Compilar desde el código
 
 Necesitas Xcode o las Command Line Tools.
