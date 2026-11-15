@@ -1,4 +1,4 @@
-# Isla
+# Isla Dinámica
 
 Una isla para el notch de tu Mac, inspirada en la Dynamic Island del iPhone. Gratis y de código abierto.
 
