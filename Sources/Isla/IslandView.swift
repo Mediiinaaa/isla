@@ -82,6 +82,11 @@ struct IslandView: View {
             shape
                 .fill(.black)
                 .shadow(color: .black.opacity(isExpanded ? 0.5 : 0), radius: 18, y: 8)
+                // En reposo, tras el notch, no se dibuja. Aparece al instante antes de crecer y,
+                // al cerrar, se apaga cuando ya casi ha encogido. Solo la opacidad: la forma sigue al muelle
+                .animation(hiddenBehindNotch ? .easeOut(duration: 0.15).delay(0.22) : nil) {
+                    $0.opacity(hiddenBehindNotch ? 0 : 1)
+                }
 
             ZStack(alignment: .top) {
                 compactLayer
@@ -105,6 +110,7 @@ struct IslandView: View {
     }
 
     private var isCompact: Bool { model.mode == .music || model.mode == .transient }
+    private var hiddenBehindNotch: Bool { model.mode == .idle && model.hardwareNotch }
 
     @ViewBuilder
     private var compactLayer: some View {
@@ -165,10 +171,10 @@ struct IslandView: View {
                         .truncationMode(.tail)
                 }
             )
-        case .output(let name, let isBluetooth):
+        case .output(let output):
             compact(
-                left: { Image(systemName: isBluetooth ? "airpods" : "hifispeaker.fill") },
-                right: { Text(name).lineLimit(1).truncationMode(.tail) }
+                left: { Image(systemName: output.symbol) },
+                right: { Text(output.name).lineLimit(1).truncationMode(.tail) }
             )
         }
     }
@@ -247,21 +253,36 @@ struct LevelBar: View {
     }
 }
 
+/// Ondas que bailan mientras suena la música y se recogen al pausar.
+/// Cada barra salta a una altura nueva y la animación la lleva hasta ella sin tirones.
 struct MusicBars: View {
     var active: Bool
     var color: Color
+    var barWidth: CGFloat = 3
+    var maxHeight: CGFloat = 14
+    @State private var levels: [CGFloat] = [0.45, 0.8, 0.6, 0.35]
+
+    /// Las barras del centro tienden a subir más, como en un ecualizador.
+    private static let weights: [CGFloat] = [0.75, 1, 0.9, 0.65]
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 12, paused: !active)) { context in
-            let time = context.date.timeIntervalSinceReferenceDate
-            HStack(spacing: 2) {
-                ForEach(0..<4, id: \.self) { index in
-                    Capsule()
-                        .fill(color)
-                        .frame(width: 3, height: 5 + 9 * abs(sin(time * 3.2 + Double(index) * 1.3)))
-                }
+        HStack(spacing: barWidth * 0.7) {
+            ForEach(levels.indices, id: \.self) { index in
+                Capsule()
+                    .fill(color)
+                    .frame(width: barWidth, height: max(barWidth, maxHeight * (active ? levels[index] : 0.22)))
             }
-            .frame(height: 14)
+        }
+        .frame(height: maxHeight)
+        .animation(.easeOut(duration: 0.3), value: active)
+        .task(id: active) {
+            guard active else { return }
+            while !Task.isCancelled {
+                withAnimation(.easeInOut(duration: 0.32)) {
+                    levels = Self.weights.map { $0 * .random(in: 0.3...1) }
+                }
+                try? await Task.sleep(for: .milliseconds(320))
+            }
         }
     }
 }
@@ -276,7 +297,11 @@ struct ExpandedView: View {
                 .frame(height: model.notch.height)
             HStack(alignment: .top, spacing: 16) {
                 if let track = model.track {
-                    playerSection(track)
+                    if model.choosingOutput {
+                        OutputPicker(model: model)
+                    } else {
+                        playerSection(track)
+                    }
                 } else {
                     idleSection
                 }
@@ -335,6 +360,20 @@ struct ExpandedView: View {
                 }
                 .lineLimit(1)
                 Spacer(minLength: 0)
+                outputButton
+            }
+            if model.showsLyricLine, let lyrics = model.lyrics {
+                LyricsView(
+                    lyrics: lyrics,
+                    track: track,
+                    active: active,
+                    rows: 1,
+                    rowHeight: 18,
+                    font: .system(size: 13, weight: .semibold),
+                    alignment: .leading,
+                    color: Color(nsColor: model.accent),
+                    dim: 0.4
+                )
             }
             ProgressRow(track: track, active: active, color: Color(nsColor: model.accent), onSeek: model.seek)
             HStack(spacing: 22) {
@@ -342,9 +381,26 @@ struct ExpandedView: View {
                 control("backward.fill", size: 17, action: model.previousTrack)
                 control(track.isPlaying ? "pause.fill" : "play.fill", size: 23, action: model.togglePlayback)
                 control("forward.fill", size: 17, action: model.nextTrack)
-                control("repeat", size: 13, on: track.repeats, action: model.toggleRepeat)
+                control((track.repeatMode ?? .off).symbol, size: 13, on: track.repeatMode.map { $0 != .off }, action: model.toggleRepeat)
             }
         }
+    }
+
+    /// Muestra por dónde suena ahora y abre la lista de salidas.
+    private var outputButton: some View {
+        Button {
+            model.refreshOutputs()
+            withAnimation(.smooth(duration: 0.25)) { model.choosingOutput = true }
+        } label: {
+            Image(systemName: model.currentOutputDevice?.symbol ?? "airplayaudio")
+                .font(.system(size: 13, weight: .medium))
+                .frame(width: 30, height: 30)
+                .background(.white.opacity(0.1), in: Circle())
+                .contentShape(Circle())
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Salida de audio")
     }
 
     private func control(_ symbol: String, size: CGFloat, on: Bool? = nil, action: @escaping () -> Void) -> some View {
@@ -360,12 +416,74 @@ struct ExpandedView: View {
     }
 }
 
+struct OutputPicker: View {
+    @ObservedObject var model: IslandModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Salida de audio")
+                    .font(.system(size: 13, weight: .semibold))
+                Spacer()
+                Button {
+                    withAnimation(.smooth(duration: 0.25)) { model.choosingOutput = false }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 9, weight: .bold))
+                        .frame(width: 22, height: 22)
+                        .background(.white.opacity(0.12), in: Circle())
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Cerrar")
+            }
+            ScrollView {
+                VStack(spacing: 2) {
+                    ForEach(model.outputs) { output in
+                        row(output, selected: output.id == model.currentOutput)
+                    }
+                }
+            }
+            .scrollIndicators(.never)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private func row(_ output: AudioOutput, selected: Bool) -> some View {
+        Button {
+            model.selectOutput(output)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: output.symbol)
+                    .frame(width: 20)
+                Text(output.name)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                if selected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Color(nsColor: model.accent))
+                }
+            }
+            .font(.system(size: 12, weight: selected ? .semibold : .regular))
+            .padding(.horizontal, 8)
+            .frame(height: 28)
+            .background(.white.opacity(selected ? 0.1 : 0), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 struct ProgressRow: View {
     var track: Track
     var active: Bool
     var color: Color
+    var textSize: CGFloat = 10
     var onSeek: (Double) -> Void
     @State private var dragFraction: Double?
+    /// Solo crece al arrastrar: un toque salta sin que la barra cambie de tamaño.
+    @State private var scrubbing = false
 
     var body: some View {
         TimelineView(PausableSchedule(interval: 0.5, paused: !active)) { context in
@@ -375,20 +493,22 @@ struct ProgressRow: View {
                 Text(Self.format(position))
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(.white.opacity(0.22))
+                        Capsule().fill(.white.opacity(scrubbing ? 0.3 : 0.22))
                         Capsule()
                             .fill(color)
                             .frame(width: duration > 0 ? geometry.size.width * min(position / duration, 1) : 0)
                     }
-                    .frame(height: 5)
+                    .frame(height: scrubbing ? 9 : 5)
                     .frame(maxHeight: .infinity)
                     .contentShape(Rectangle())
                     .gesture(DragGesture(minimumDistance: 0)
                         .onChanged { value in
                             dragFraction = Self.fraction(value.location.x, width: geometry.size.width)
+                            if !scrubbing, abs(value.translation.width) > 3 { scrubbing = true }
                         }
                         .onEnded { value in
                             dragFraction = nil
+                            scrubbing = false
                             guard duration > 0 else { return }
                             onSeek(duration * Self.fraction(value.location.x, width: geometry.size.width))
                         })
@@ -396,9 +516,10 @@ struct ProgressRow: View {
                 .frame(height: 14)
                 Text(Self.format(duration))
             }
-            .font(.system(size: 10, weight: .medium))
+            .font(.system(size: textSize, weight: .medium))
             .monospacedDigit()
-            .foregroundStyle(.white.opacity(0.6))
+            .foregroundStyle(.white.opacity(scrubbing ? 0.9 : 0.6))
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: scrubbing)
         }
     }
 

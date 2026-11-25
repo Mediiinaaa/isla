@@ -5,6 +5,8 @@ Una isla para el notch de tu Mac, inspirada en la Dynamic Island del iPhone. Gra
 ## Qué hace
 
 - **Música**: canción actual de Spotify o Música con carátula, controles y gestos (desliza con dos dedos para cambiar de canción)
+- **Letras sincronizadas**: la letra avanza con la canción y se ilumina palabra a palabra cuando hay tiempos por palabra
+- **Salida de audio**: cambia entre AirPods, altavoces, AirPlay o la pantalla desde la propia isla
 - **Volumen y brillo**: sustituye los avisos de macOS por unos en la isla
 - **Batería**: avisa al conectar o desconectar el cargador, con batería baja y en modo de ahorro
 - **Calendario**: próximos eventos y recordatorios, con enlace directo a Zoom, Meet, Teams o Webex
@@ -30,6 +32,8 @@ Según lo que actives, Isla te pedirá:
 - **Accesibilidad**: para sustituir los avisos de volumen y brillo
 - **Automatización**: para controlar Spotify y Música
 - **Calendarios**: para mostrar tus eventos (no salen de tu Mac)
+
+Las letras se buscan en [LRCLIB](https://lrclib.net), una base de datos abierta: para ello se envían el título, el artista y la duración de la canción. Puedes desactivarlas en **Ajustes → Música**.
 
 <sub>Parte de este proyecto se ha hecho con ayuda de Claude (Anthropic).</sub>
 
