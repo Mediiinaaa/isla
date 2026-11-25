@@ -2,6 +2,14 @@
 
 Una isla para el notch de tu Mac, inspirada en la Dynamic Island del iPhone. Gratis y de código abierto.
 
+## Novedades
+
+- **Letras sincronizadas**: la letra de la canción aparece en la isla desplegada y se ilumina palabra a palabra mientras suena
+- **Salida de audio**: elige AirPods, altavoces, AirPlay o la pantalla sin salir de la isla
+- **Notch invisible en reposo**: la isla se esconde detrás de la cámara y ya no se nota un borde a su alrededor
+- **Más discreta**: se oculta al bloquear el Mac o al apagar la pantalla
+- Nueva pestaña **Música** en los ajustes
+
 ## Qué hace
 
 - **Música**: canción actual de Spotify o Música con carátula, controles y gestos (desliza con dos dedos para cambiar de canción)
