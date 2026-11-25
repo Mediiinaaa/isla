@@ -5,6 +5,7 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = IslandModel()
     private var panel: IslandPanel!
+    private let screenLock = ScreenLockMonitor()
     private var statusItem: NSStatusItem!
     private var monitors: [Any] = []
     private var settingsWindow: NSWindow?
@@ -24,6 +25,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.applyPreferences()
         panel.reposition()
         panel.orderFrontRegardless()
+
+        // Con el Mac bloqueado o la pantalla apagada, la isla no se dibuja
+        screenLock.onChange = { [weak self] hidden in
+            guard let self else { return }
+            if hidden {
+                self.panel.orderOut(nil)
+            } else {
+                self.panel.reposition()
+                self.panel.orderFrontRegardless()
+            }
+        }
+        screenLock.start()
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.image = NSImage(systemSymbolName: "capsule.fill", accessibilityDescription: "Isla")
@@ -160,8 +173,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             swipeY = 0
             swipeDone = false
         }
+        // Con la lista de salidas abierta, deslizar desplaza la lista
         guard panel.islandRect.contains(NSEvent.mouseLocation), event.hasPreciseScrollingDeltas,
-              !event.phase.isEmpty, !swipeDone
+              !event.phase.isEmpty, !swipeDone, !(model.hovering && model.choosingOutput)
         else { return }
         let direction: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1
         swipeX += event.scrollingDeltaX * direction
@@ -254,6 +268,8 @@ final class IslandPanel: NSPanel {
         guard let screen = islandScreen else { return }
         let notch = Self.notchSize(of: screen)
         if model.notch != notch { model.notch = notch }
+        let hardware = Self.hasHardwareNotch(screen)
+        if model.hardwareNotch != hardware { model.hardwareNotch = hardware }
         setFrame(
             CGRect(
                 x: screen.frame.midX - Self.canvas.width / 2,
@@ -269,19 +285,25 @@ final class IslandPanel: NSPanel {
     var islandRect: CGRect {
         guard let screen = islandScreen else { return .zero }
         let size = model.size
+        // En reposo la isla mide lo que el notch: algo más de margen para alcanzarla
+        let margin = model.mode == .idle ? CGSize(width: 9, height: 4) : CGSize(width: 4, height: 3)
         return CGRect(
             x: screen.frame.midX - size.width / 2,
             y: screen.frame.maxY - size.height,
             width: size.width,
             height: size.height
-        ).insetBy(dx: -4, dy: -3)
+        ).insetBy(dx: -margin.width, dy: -margin.height)
+    }
+
+    private static func hasHardwareNotch(_ screen: NSScreen) -> Bool {
+        !UserDefaults.standard.bool(forKey: Preference.forceSimulatedNotch) && screen.safeAreaInsets.top > 0
+            && screen.auxiliaryTopLeftArea != nil && screen.auxiliaryTopRightArea != nil
     }
 
     private static func notchSize(of screen: NSScreen) -> CGSize {
         let defaults = UserDefaults.standard
         var size = CGSize(width: 180, height: 26) // Pantalla sin notch: una píldora bajo el borde superior
-        if !defaults.bool(forKey: Preference.forceSimulatedNotch), screen.safeAreaInsets.top > 0,
-           let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea {
+        if hasHardwareNotch(screen), let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea {
             size = CGSize(width: screen.frame.width - left.width - right.width, height: screen.safeAreaInsets.top)
         }
         size.width += defaults.double(forKey: Preference.notchWidthOffset).rounded()

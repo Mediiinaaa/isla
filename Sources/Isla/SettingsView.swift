@@ -9,6 +9,7 @@ struct SettingsView: View {
             TabView {
                 GeneralSettings(login: login).tabItem { Label("General", systemImage: "gearshape") }
                 GestureSettings().tabItem { Label("Gestos", systemImage: "hand.draw") }
+                MusicSettings().tabItem { Label("Música", systemImage: "music.note") }
                 ActivitySettings().tabItem { Label("Actividades", systemImage: "sparkles") }
                 HUDSettings().tabItem { Label("Avisos", systemImage: "speaker.wave.2") }
                 CalendarSettings().tabItem { Label("Calendario", systemImage: "calendar") }
@@ -18,7 +19,7 @@ struct SettingsView: View {
                 .foregroundStyle(.tertiary)
                 .padding(.bottom, 6)
         }
-        .frame(width: 500, height: 480)
+        .frame(width: 560, height: 520)
     }
 }
 
@@ -86,11 +87,33 @@ private struct GestureSettings: View {
     }
 }
 
-private struct ActivitySettings: View {
+private struct MusicSettings: View {
     @AppStorage(Preference.showMusic) private var showMusic = true
     @AppStorage(Preference.peekOnChange) private var peekOnChange = true
     @AppStorage(Preference.peekDuration) private var peekDuration = 2.5
     @AppStorage(Preference.useArtworkColor) private var useArtworkColor = true
+    @AppStorage(Preference.showLyrics) private var showLyrics = true
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Mostrar la música en reproducción", isOn: $showMusic)
+                Toggle("Vistazo al cambiar de canción", isOn: $peekOnChange)
+                Slider(value: $peekDuration, in: 1...6, step: 0.5) { Text("Duración") }
+                    .disabled(!peekOnChange)
+                Toggle("Usar el color de la carátula", isOn: $useArtworkColor)
+                Toggle("Mostrar la letra sincronizada", isOn: $showLyrics)
+            } header: {
+                Text("En la isla")
+            } footer: {
+                Text("Las letras vienen de LRCLIB, una base de datos abierta: para buscarlas se envían el título, el artista y la duración de la canción.")
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+private struct ActivitySettings: View {
     @AppStorage(Preference.showPower) private var showPower = true
     @AppStorage(Preference.warnLowBattery) private var warnLowBattery = true
     @AppStorage(Preference.lowBatteryThreshold) private var threshold = 20
@@ -101,13 +124,6 @@ private struct ActivitySettings: View {
 
     var body: some View {
         Form {
-            Section("Música") {
-                Toggle("Mostrar la música en reproducción", isOn: $showMusic)
-                Toggle("Vistazo al cambiar de canción", isOn: $peekOnChange)
-                Slider(value: $peekDuration, in: 1...6, step: 0.5) { Text("Duración") }
-                    .disabled(!peekOnChange)
-                Toggle("Usar el color de la carátula", isOn: $useArtworkColor)
-            }
             Section("Batería") {
                 Toggle("Cargador conectado o desconectado", isOn: $showPower)
                 Toggle("Avisar con batería baja", isOn: $warnLowBattery)
